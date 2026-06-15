@@ -1,6 +1,12 @@
 from datetime import date
 import smtplib
-from flask import Flask, abort, render_template, redirect, url_for, flash
+
+# Environment Variable Set-up
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
+from flask import Flask, abort, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
@@ -10,7 +16,6 @@ from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Text, ForeignKey
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
-import os
 
 # Import forms from form.py
 from forms import CreatePostForm, RegistrationForm, LoginForm, CommentForm
@@ -28,6 +33,27 @@ pip3 install -r requirements.txt
 This will install the packages from the requirements.txt for this project.
 '''
 
+#---------- EMAIL CONNECTION ----------#
+def send_email(sender_email="", message=""):
+    email = os.environ.get('EMAIL')
+    password = os.environ.get('PASSWORD')
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as connection:
+            connection.starttls()
+            connection.login(user=email, password=password)
+
+            # Adding a Subject line helps pass Gmail's spam filters
+            connection.sendmail(
+                from_addr=sender_email,
+                to_addrs=email,
+                msg=f"Subject:Query Regarding Blog\n\n{message}"
+            )
+        return None
+
+    except smtplib.SMTPAuthenticationError:
+        return "Authentication failed. Double-check your App Password and ensure 2-Step Verification is ON."
+
+
 #---------- ADMIN-ONLY DECORATOR ----------#
 def admin_only(func):
     @wraps(func)
@@ -40,7 +66,7 @@ def admin_only(func):
 
 #---------- FLASK APP SET-UP ----------#
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+app.config['SECRET_KEY'] = os.getenv('FLASK_KEY')
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
@@ -57,7 +83,7 @@ def load_user(user_id):
 #---------- CREATE DATABASE ----------#
 class Base(DeclarativeBase):
     pass
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URL", "sqlite:///posts.db")
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
@@ -269,8 +295,17 @@ def about():
 
 @app.route("/contact", methods=["POST", "GET"])
 def contact():
+    if request.method == "POST":
+        data = request.form
+        message = send_email(sender_email=data["email"],
+                   message=f"Name: {data["name"]}\nEmail: {data["email"]}\nPhone Number: {data["phone"]}\nMessage: {data['message']}")
+        if message:
+            flash(message)
+        return redirect(url_for("get_all_posts"))
     return render_template("contact.html")
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5002)
+    app.run(debug=True)
+
+# smwuvijerrsjlygb
