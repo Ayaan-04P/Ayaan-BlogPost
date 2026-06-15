@@ -33,27 +33,6 @@ pip3 install -r requirements.txt
 This will install the packages from the requirements.txt for this project.
 '''
 
-#---------- EMAIL CONNECTION ----------#
-def send_email(sender_email="", message=""):
-    email = os.environ.get('EMAIL')
-    password = os.environ.get('PASSWORD')
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as connection:
-            connection.starttls()
-            connection.login(user=email, password=password)
-
-            # Adding a Subject line helps pass Gmail's spam filters
-            connection.sendmail(
-                from_addr=sender_email,
-                to_addrs=email,
-                msg=f"Subject:Query Regarding Blog\n\n{message}"
-            )
-        return None
-
-    except smtplib.SMTPAuthenticationError:
-        return "Authentication failed. Double-check your App Password and ensure 2-Step Verification is ON."
-
-
 #---------- ADMIN-ONLY DECORATOR ----------#
 def admin_only(func):
     @wraps(func)
@@ -293,19 +272,25 @@ def about():
     return render_template("about.html")
 
 
-@app.route("/contact", methods=["POST", "GET"])
+#---------- CONTACT PAGE SET-UP ----------#
+EMAIL = os.environ.get('EMAIL_KEY')
+PASSWORD = os.environ.get('PASSWORD_KEY')
+
+def send_email(name, email, phone, message):
+    email_message = f"Subject:Query Regarding Blog\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
+    with smtplib.SMTP("smtp.gmail.com") as connection:
+        connection.starttls()
+        connection.login(user=EMAIL, password=PASSWORD)
+        connection.sendmail(from_addr=email, to_addrs=EMAIL, msg=email_message)
+
+@app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "POST":
         data = request.form
-        message = send_email(sender_email=data["email"],
-                   message=f"Name: {data["name"]}\nEmail: {data["email"]}\nPhone Number: {data["phone"]}\nMessage: {data['message']}")
-        if message:
-            flash(message)
-        return redirect(url_for("get_all_posts"))
-    return render_template("contact.html")
+        send_email(data["name"], data["email"], data["phone"], data["message"])
+        return render_template("contact.html", msg_sent=True)
+    return render_template("contact.html", msg_sent=False)
 
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-# smwuvijerrsjlygb
