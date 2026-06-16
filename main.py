@@ -37,7 +37,7 @@ PASSWORD = os.environ.get('PASSWORD_KEY')
 
 def send_email(name, email, phone, message): # Send email to the admin
     email_message = f"Subject:Query Regarding Blog\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
-    with smtplib.SMTP("smtp.gmail.com") as connection:
+    with smtplib.SMTP("smtp.gmail.com", 587) as connection:
         connection.starttls()
         connection.login(user=EMAIL, password=PASSWORD)
         connection.sendmail(from_addr=email, to_addrs=EMAIL, msg=email_message)
