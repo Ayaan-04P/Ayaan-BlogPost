@@ -1,25 +1,49 @@
-from datetime import date
-import smtplib
-
-# Environment Variable Set-up
-from dotenv import load_dotenv
-load_dotenv()
-import os
-
+#---------- Flask and Related Modules ----------#
 from flask import Flask, abort, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+
+
+#---------- SQLite Database Modules ----------#
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Text, ForeignKey
+
+
+#---------- Security Modules Modules ----------#
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# Import forms from form.py
+
+#---------- Forms from form.py ----------#
 from forms import CreatePostForm, RegistrationForm, LoginForm, CommentForm
 
+
+#---------- datetime module ----------#
+from datetime import date
+
+
+#---------- Environment Variable Set-Up ----------#
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
+#---------- Email and smtplib Set-Up ----------#
+import smtplib
+EMAIL = os.environ.get('EMAIL_KEY')
+PASSWORD = os.environ.get('PASSWORD_KEY')
+
+def send_email(name, email, phone, message): # Send email to the admin
+    email_message = f"Subject:Query Regarding Blog\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
+    with smtplib.SMTP("smtp.gmail.com") as connection:
+        connection.starttls()
+        connection.login(user=EMAIL, password=PASSWORD)
+        connection.sendmail(from_addr=email, to_addrs=EMAIL, msg=email_message)
+
+
+#---------- Instructions for requirements.txt ----------#
 '''
 Make sure the required packages are installed: 
 Open the Terminal in PyCharm (bottom left). 
@@ -33,7 +57,18 @@ pip3 install -r requirements.txt
 This will install the packages from the requirements.txt for this project.
 '''
 
-#---------- ADMIN-ONLY DECORATOR ----------#
+
+#---------- Flask App Set-Up ----------#
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('FLASK_KEY')
+
+
+#---------- Bootstrap and CKEditor Integration ----------#
+ckeditor = CKEditor(app)
+Bootstrap5(app)
+
+
+#---------- Admin-Only Decorator ----------#
 def admin_only(func):
     @wraps(func)
     def decorated_function(*args, **kwargs):
@@ -43,14 +78,7 @@ def admin_only(func):
     return decorated_function
 
 
-#---------- FLASK APP SET-UP ----------#
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('FLASK_KEY')
-ckeditor = CKEditor(app)
-Bootstrap5(app)
-
-
-#---------- SET-UP LOGIN MANAGER ----------#
+#---------- Login-Manager Set-Up ----------#
 login_manager = LoginManager()
 login_manager.init_app(app)
 
@@ -59,7 +87,7 @@ def load_user(user_id):
     return db.get_or_404(User, user_id)
 
 
-#---------- CREATE DATABASE ----------#
+#---------- Create Database ----------#
 class Base(DeclarativeBase):
     pass
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URL", "sqlite:///posts.db")
@@ -67,8 +95,8 @@ db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
 
-#---------- CONFIGURE TABLES ----------#
-class User(UserMixin, db.Model):
+#---------- Tables Configuration ----------#
+class User(UserMixin, db.Model): # Table of users
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(250), unique=True)
@@ -82,7 +110,7 @@ class User(UserMixin, db.Model):
     comments = relationship("Comment", back_populates="comment_author")
 
 
-class BlogPost(db.Model):
+class BlogPost(db.Model): # Table of posts
     __tablename__ = "blog_posts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(250), unique=True, nullable=False)
@@ -99,7 +127,7 @@ class BlogPost(db.Model):
     comments = relationship("Comment", back_populates="parent_post")
 
 
-class Comment(db.Model):
+class Comment(db.Model): # Table of comments
     __tablename__ = "comments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     text: Mapped[str] = mapped_column(String(800), nullable=False)
@@ -113,11 +141,11 @@ class Comment(db.Model):
     parent_post = relationship("BlogPost", back_populates="comments")
 
 
-with app.app_context():
+with app.app_context(): # Add all the tables to database
     db.create_all()
 
 
-#---------- COMMENT PICTURE ----------#
+#---------- Generation of picture for users in comment section ----------#
 gravatar = Gravatar(app,
                     size=100,
                     rating='g',
@@ -128,9 +156,9 @@ gravatar = Gravatar(app,
                     base_url=None)
 
 
-#---------- ROUTES SET-UP ----------#
+#---------- Routes Set-Up ----------#
 @app.route('/register', methods=["GET", "POST"])
-def register():
+def register(): # Route for registration for user
     form = RegistrationForm()
     if form.validate_on_submit():
 
@@ -162,7 +190,7 @@ def register():
 
 
 @app.route('/login', methods=["GET", "POST"])
-def login():
+def login(): # Route for log-in of user
     form = LoginForm()
     if form.validate_on_submit():
         email = form.email.data
@@ -187,20 +215,20 @@ def login():
 
 
 @app.route('/logout')
-def logout():
+def logout(): # Route to log-out user
     logout_user()
     return redirect(url_for('get_all_posts'))
 
 
 @app.route('/')
-def get_all_posts():
+def get_all_posts(): # Route to display all the posts
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
     return render_template("index.html", all_posts=posts)
 
 
 @app.route("/post/<int:post_id>", methods=["GET", "POST"])
-def show_post(post_id):
+def show_post(post_id): # Route to display a specific post
     requested_post = db.get_or_404(BlogPost, post_id)
     form = CommentForm()
     if form.validate_on_submit():
@@ -219,7 +247,7 @@ def show_post(post_id):
 
 @app.route("/new-post", methods=["GET", "POST"])
 @admin_only
-def add_new_post():
+def add_new_post(): # Route to add a new post
     form = CreatePostForm()
     if form.validate_on_submit():
         new_post = BlogPost(
@@ -238,7 +266,7 @@ def add_new_post():
 
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
 @admin_only
-def edit_post(post_id):
+def edit_post(post_id): # Route to edit the post
     post = db.get_or_404(BlogPost, post_id)
     edit_form = CreatePostForm(
         title=post.title,
@@ -260,7 +288,7 @@ def edit_post(post_id):
 
 @app.route("/delete/<int:post_id>")
 @admin_only
-def delete_post(post_id):
+def delete_post(post_id): # Route to delete a post
     post_to_delete = db.get_or_404(BlogPost, post_id)
     db.session.delete(post_to_delete)
     db.session.commit()
@@ -268,23 +296,13 @@ def delete_post(post_id):
 
 
 @app.route("/about")
-def about():
+def about(): # Route for "about me" page
     return render_template("about.html")
 
 
 #---------- CONTACT PAGE SET-UP ----------#
-EMAIL = os.environ.get('EMAIL_KEY')
-PASSWORD = os.environ.get('PASSWORD_KEY')
-
-def send_email(name, email, phone, message):
-    email_message = f"Subject:Query Regarding Blog\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
-    with smtplib.SMTP("smtp.gmail.com") as connection:
-        connection.starttls()
-        connection.login(user=EMAIL, password=PASSWORD)
-        connection.sendmail(from_addr=email, to_addrs=EMAIL, msg=email_message)
-
 @app.route("/contact", methods=["GET", "POST"])
-def contact():
+def contact(): # Route for "contact me" page
     if request.method == "POST":
         data = request.form
         send_email(data["name"], data["email"], data["phone"], data["message"])
